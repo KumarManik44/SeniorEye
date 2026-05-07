@@ -4,8 +4,6 @@
 
 No flattery. No generic feedback. SeniorEye reads the README and tells you what a grumpy, experienced engineer actually thinks — score, strengths, weaknesses, recommendations, and a hiring signal.
 
-![SeniorEye screenshot](screenshot.png)
-
 ---
 
 ## What it does
