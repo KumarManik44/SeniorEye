@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SeniorEye — Honest code review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #1e1e1e;
+    --border-bright: #2e2e2e;
+    --text: #e8e4dc;
+    --text-muted: #5a5650;
+    --text-dim: #3a3632;
+    --accent: #c8b89a;
+    --accent-glow: rgba(200,184,154,0.08);
+    --red: #c0392b;
+    --green: #27ae60;
+    --yellow: #d4a017;
+    --mono: 'DM Mono', monospace;
+    --serif: 'Instrument Serif', serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { font-size: 16px; scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Subtle noise texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    padding: 3rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .wordmark {
+    font-family: var(--serif);
+    font-size: 1.75rem;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .wordmark em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .tagline {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 300;
+  }
+
+  /* Input section */
+  .input-section {
+    padding: 2.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .input-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border-bright);
+    background: var(--surface);
+    transition: border-color 0.2s;
+  }
+
+  .input-row:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-glow), inset 0 0 24px var(--accent-glow);
+  }
+
+  #repo-url {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0.9rem 1rem;
+    font-family: var(--mono);
+    font-size: 0.875rem;
+    color: var(--text);
+    font-weight: 300;
+  }
+
+  #repo-url::placeholder { color: var(--text-dim); }
+
+  #submit-btn {
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border-bright);
+    padding: 0.9rem 1.25rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+    white-space: nowrap;
+  }
+
+  #submit-btn:hover:not(:disabled) {
+    color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  #submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .hint {
+    margin-top: 0.5rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-weight: 300;
+  }
+
+  /* States */
+  #state-loading, #state-error, #state-result { display: none; }
+
+  /* Loading */
+  #state-loading {
+    padding: 3rem 0;
+    text-align: center;
+  }
+
+  .loading-bar {
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+  }
+
+  .loading-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -40%;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: scan 1.4s ease-in-out infinite;
+  }
+
+  @keyframes scan {
+    0% { left: -40%; }
+    100% { left: 140%; }
+  }
+
+  .loading-text {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  /* Error */
+  #state-error {
+    padding: 2rem 0;
+  }
+
+  .error-box {
+    border: 1px solid #3a1a1a;
+    background: #120808;
+    padding: 1rem 1.25rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .error-prefix {
+    color: var(--red);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    padding-top: 0.1rem;
+  }
+
+  .error-msg { color: #c07070; font-size: 0.85rem; font-weight: 300; }
+
+  /* Result */
+  #state-result { padding: 2.5rem 0; }
+
+  /* Score header */
+  .score-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .score-display {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+  }
+
+  .score-number {
+    font-family: var(--serif);
+    font-size: 5rem;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--text);
+  }
+
+  .score-denom {
+    font-family: var(--mono);
+    font-size: 1rem;
+    color: var(--text-muted);
+    font-weight: 300;
+  }
+
+  .score-bar-wrap {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .score-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .score-bar-track {
+    height: 2px;
+    background: var(--border-bright);
+    width: 100%;
+  }
+
+  .score-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+  }
+
+  .repo-ref {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-weight: 300;
+    margin-top: 0.25rem;
+    font-style: italic;
+  }
+
+  /* Verdict */
+  .verdict-block {
+    margin-bottom: 2.5rem;
+  }
+
+  .verdict-text {
+    font-family: var(--serif);
+    font-size: 1.15rem;
+    line-height: 1.6;
+    color: var(--text);
+    font-style: italic;
+    border-left: 2px solid var(--accent);
+    padding-left: 1.25rem;
+  }
+
+  /* Sections */
+  .section { margin-bottom: 2.5rem; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-marker {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid;
+  }
+
+  .section-marker.green { color: var(--green); border-color: rgba(39,174,96,0.3); background: rgba(39,174,96,0.05); }
+  .section-marker.red { color: #e57373; border-color: rgba(192,57,43,0.3); background: rgba(192,57,43,0.05); }
+  .section-marker.yellow { color: var(--yellow); border-color: rgba(212,160,23,0.3); background: rgba(212,160,23,0.05); }
+  .section-marker.neutral { color: var(--text-muted); border-color: var(--border-bright); }
+
+  .item-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+  .item {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+    padding: 0.85rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 2px solid;
+    transition: border-color 0.2s;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .item.strength { border-left-color: rgba(39,174,96,0.4); }
+  .item.weakness { border-left-color: rgba(192,57,43,0.4); }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .item-title {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.01em;
+  }
+
+  .item-detail {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 300;
+    line-height: 1.55;
+  }
+
+  /* Recommendations */
+  .rec-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  .rec-item {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .rec-num {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    padding-top: 0.2rem;
+    min-width: 1.5rem;
+    font-weight: 300;
+  }
+
+  .rec-text {
+    font-size: 0.85rem;
+    color: var(--text);
+    font-weight: 300;
+    line-height: 1.55;
+  }
+
+  /* Hiring signal */
+  .hiring-block {
+    border: 1px solid var(--border-bright);
+    padding: 1.25rem;
+    background: var(--surface);
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .hiring-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-weight: 500;
+  }
+
+  .hiring-text {
+    font-family: var(--serif);
+    font-size: 1rem;
+    color: var(--accent);
+    font-style: italic;
+    line-height: 1.5;
+  }
+
+  /* Footer */
+  footer {
+    padding: 2rem 0;
+    border-top: 1px solid var(--border);
+    margin-top: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .footer-note {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    font-weight: 300;
+    letter-spacing: 0.04em;
+  }
+
+  .new-review-btn {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--border-bright);
+    padding: 0.4rem 0.85rem;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+
+  .new-review-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* Stagger animations */
+  .item:nth-child(1) { animation-delay: 0.05s; }
+  .item:nth-child(2) { animation-delay: 0.1s; }
+  .item:nth-child(3) { animation-delay: 0.15s; }
+  .item:nth-child(4) { animation-delay: 0.2s; }
+  .item:nth-child(5) { animation-delay: 0.25s; }
+  .rec-item:nth-child(1) { animation-delay: 0.05s; }
+  .rec-item:nth-child(2) { animation-delay: 0.1s; }
+  .rec-item:nth-child(3) { animation-delay: 0.15s; }
+  .rec-item:nth-child(4) { animation-delay: 0.2s; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="header-inner">
+      <h1 class="wordmark">Senior<em>Eye</em></h1>
+      <span class="tagline">Honest repo reviews · No flattery</span>
+    </div>
+  </header>
+
+  <section class="input-section">
+    <label class="input-label" for="repo-url">GitHub Repository URL</label>
+    <div class="input-row">
+      <input
+        type="text"
+        id="repo-url"
+        placeholder="https://github.com/owner/repo"
+        spellcheck="false"
+        autocomplete="off"
+      />
+      <button id="submit-btn">Review →</button>
+    </div>
+    <p class="hint">Press Enter or click Review. Analysis based on README.</p>
+  </section>
+
+  <!-- Loading -->
+  <div id="state-loading">
+    <div class="loading-bar"></div>
+    <p class="loading-text">Pulling README · Running analysis</p>
+  </div>
+
+  <!-- Error -->
+  <div id="state-error">
+    <div class="error-box">
+      <span class="error-prefix">Error</span>
+      <span class="error-msg" id="error-message">Something went wrong.</span>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div id="state-result">
+
+    <div class="score-header">
+      <div class="score-display">
+        <span class="score-number" id="score-number">—</span>
+        <span class="score-denom">/10</span>
+      </div>
+      <div class="score-bar-wrap">
+        <span class="score-label" id="score-label">Overall Score</span>
+        <div class="score-bar-track">
+          <div class="score-bar-fill" id="score-bar"></div>
+        </div>
+        <p class="repo-ref" id="repo-ref"></p>
+      </div>
+    </div>
+
+    <div class="verdict-block">
+      <p class="verdict-text" id="verdict-text"></p>
+    </div>
+
+    <div class="section" id="strengths-section">
+      <div class="section-header">
+        <span class="section-marker green">Strengths</span>
+      </div>
+      <div class="item-list" id="strengths-list"></div>
+    </div>
+
+    <div class="section" id="weaknesses-section">
+      <div class="section-header">
+        <span class="section-marker red">Weaknesses</span>
+      </div>
+      <div class="item-list" id="weaknesses-list"></div>
+    </div>
+
+    <div class="section" id="recs-section">
+      <div class="section-header">
+        <span class="section-marker yellow">Recommendations</span>
+      </div>
+      <div class="rec-list" id="recs-list"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-marker neutral">Hiring Signal</span>
+      </div>
+      <div class="hiring-block">
+        <span class="hiring-label">Verdict</span>
+        <p class="hiring-text" id="hiring-text"></p>
+      </div>
+    </div>
+
+    <footer>
+      <span class="footer-note">SeniorEye · README-based analysis · Powered by Gemini</span>
+      <button class="new-review-btn" id="new-review-btn">New review</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+  const urlInput = document.getElementById('repo-url');
+  const submitBtn = document.getElementById('submit-btn');
+  const stateLoading = document.getElementById('state-loading');
+  const stateError = document.getElementById('state-error');
+  const stateResult = document.getElementById('state-result');
+
+  function showState(state) {
+    stateLoading.style.display = 'none';
+    stateError.style.display = 'none';
+    stateResult.style.display = 'none';
+    if (state === 'loading') stateLoading.style.display = 'block';
+    if (state === 'error') stateError.style.display = 'block';
+    if (state === 'result') stateResult.style.display = 'block';
+  }
+
+  function getScoreColor(score) {
+    if (score >= 8) return '#27ae60';
+    if (score >= 6) return '#d4a017';
+    return '#c0392b';
+  }
+
+  function renderResult(data, repoUrl) {
+    const repoName = repoUrl.replace('https://github.com/', '').replace('http://github.com/', '');
+
+    document.getElementById('score-number').textContent = data.score;
+    document.getElementById('score-number').style.color = getScoreColor(data.score);
+    document.getElementById('repo-ref').textContent = repoName;
+    document.getElementById('verdict-text').textContent = data.verdict;
+    document.getElementById('hiring-text').textContent = data.hiring_signal;
+
+    // Animate score bar
+    setTimeout(() => {
+      document.getElementById('score-bar').style.width = `${(data.score / 10) * 100}%`;
+      document.getElementById('score-bar').style.background = getScoreColor(data.score);
+    }, 100);
+
+    // Strengths
+    const strengthsList = document.getElementById('strengths-list');
+    strengthsList.innerHTML = '';
+    (data.strengths || []).forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'item strength';
+      el.innerHTML = `<span class="item-title">${s.title}</span><span class="item-detail">${s.detail}</span>`;
+      strengthsList.appendChild(el);
+    });
+
+    // Weaknesses
+    const weaknessesList = document.getElementById('weaknesses-list');
+    weaknessesList.innerHTML = '';
+    (data.weaknesses || []).forEach(w => {
+      const el = document.createElement('div');
+      el.className = 'item weakness';
+      el.innerHTML = `<span class="item-title">${w.title}</span><span class="item-detail">${w.detail}</span>`;
+      weaknessesList.appendChild(el);
+    });
+
+    // Recommendations
+    const recsList = document.getElementById('recs-list');
+    recsList.innerHTML = '';
+    (data.recommendations || []).forEach((r, i) => {
+      const el = document.createElement('div');
+      el.className = 'rec-item';
+      el.innerHTML = `<span class="rec-num">0${i + 1}</span><span class="rec-text">${r}</span>`;
+      recsList.appendChild(el);
+    });
+
+    showState('result');
+  }
+
+  async function runReview() {
+    const url = urlInput.value.trim();
+    if (!url) return;
+    if (!url.includes('github.com')) {
+      document.getElementById('error-message').textContent = 'Please enter a valid GitHub repository URL.';
+      showState('error');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    showState('loading');
+
+    try {
+      const res = await fetch('/api/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo_url: url }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.detail || 'Review failed');
+      }
+
+      renderResult(data, url);
+    } catch (err) {
+      document.getElementById('error-message').textContent = err.message;
+      showState('error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  submitBtn.addEventListener('click', runReview);
+  urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') runReview(); });
+
+  document.getElementById('new-review-btn').addEventListener('click', () => {
+    urlInput.value = '';
+    showState(null);
+    urlInput.focus();
+  });
+</script>
+</body>
+</html>
