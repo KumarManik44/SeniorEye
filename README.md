@@ -4,6 +4,8 @@
 
 No flattery. No generic feedback. SeniorEye reads the README and tells you what a grumpy, experienced engineer actually thinks — score, strengths, weaknesses, recommendations, and a hiring signal.
 
+**Live demo:** https://senior-eye.vercel.app
+
 ---
 
 ## What it does
